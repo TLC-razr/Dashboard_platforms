@@ -134,6 +134,7 @@ textarea{resize:vertical;min-height:76px}
       <span class="cloud-pill warn" id="cloudStatus"><span class="cloud-dot"></span><span id="cloudStatusText">Подключение…</span></span>
       <span class="user-chip" id="userChip"><span id="userEmail">—</span></span>
       <button class="btn" id="refreshCloudBtn" type="button">↻ Обновить</button>
+      <button class="btn primary" id="saveCloudBtn" type="button">✓ Сохранить</button>
       <button class="btn" id="logoutBtn" type="button">Выйти</button>
       <button class="btn" id="startSurveyBtn">Начать опрос дня</button>
       <button class="btn" id="openEntryBtn">+ Предложение</button>
@@ -543,6 +544,39 @@ textarea{resize:vertical;min-height:76px}
     }),700);
   }
 
+  function persistLocalSnapshot(){
+    localStorage.setItem(KEY_DIR,JSON.stringify(directory));
+    localStorage.setItem(KEY_ENTRIES,JSON.stringify(entries));
+    localStorage.setItem(KEY_CONTROL,JSON.stringify(controlLists));
+  }
+
+  async function waitForCloudIdle(){
+    while(cloudSyncBusy){
+      await new Promise(resolve=>setTimeout(resolve,80));
+    }
+  }
+
+  async function saveNowToCloud(){
+    persistLocalSnapshot();
+    clearTimeout(cloudSyncTimer);
+    if(!cloudReady||!sbClient){
+      throw new Error('Нет активного подключения к Supabase. Войдите в систему и повторите сохранение.');
+    }
+    const btn=document.getElementById('saveCloudBtn');
+    if(btn){btn.disabled=true;btn.textContent='Сохранение…';}
+    setCloudStatus('warn','Сохранение…');
+    try{
+      await waitForCloudIdle();
+      await pushSnapshotToCloud(true);
+      const now=new Date();
+      const hh=String(now.getHours()).padStart(2,'0');
+      const mm=String(now.getMinutes()).padStart(2,'0');
+      setCloudStatus('ok',`Сохранено ${hh}:${mm}`);
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='✓ Сохранить';}
+    }
+  }
+
   async function syncControlDate(d){
     if(!cloudReady||!sbClient)return;
     const ids=Array.isArray(controlLists[d])?controlLists[d]:[];
@@ -920,6 +954,14 @@ textarea{resize:vertical;min-height:76px}
       if(!session){showLogin(true);return;}
       await bootstrapOrLoadCloud();
     }catch(err){setCloudStatus('bad','Ошибка загрузки');alert(err.message||String(err));}
+  });
+  document.getElementById('saveCloudBtn').addEventListener('click',async()=>{
+    try{
+      await saveNowToCloud();
+    }catch(err){
+      setCloudStatus('bad','Ошибка сохранения');
+      alert('Не удалось сохранить данные в Supabase: '+(err.message||String(err)));
+    }
   });
   document.getElementById('logoutBtn').addEventListener('click',()=>logoutSupabase().catch(err=>alert(err.message||String(err))));
 
