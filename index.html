@@ -1,0 +1,1041 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ЖД отдел — мониторинг фитинговых платформ</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f4f7fb; --card:#fff; --text:#182230; --muted:#6b778c; --line:#dfe6ef;
+  --accent:#155eef; --accent2:#0f4fc9; --good:#0e9f6e; --warn:#d97706; --bad:#d92d20;
+  --soft:#eef4ff; --shadow:0 8px 24px rgba(20,34,55,.06);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.app{max-width:1540px;margin:0 auto;padding:20px}
+.topbar{display:flex;gap:18px;align-items:center;justify-content:space-between;margin-bottom:18px}
+.brand h1{font-size:24px;margin:0 0 4px}
+.brand p{margin:0;color:var(--muted);font-size:13px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.btn{border:1px solid var(--line);background:#fff;color:var(--text);border-radius:10px;padding:10px 13px;font-weight:650}
+.btn:hover{border-color:#b9c5d4}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent2)}
+.btn.good{background:var(--good);border-color:var(--good);color:#fff}
+.btn.danger{color:var(--bad)}
+.toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+.field{display:flex;flex-direction:column;gap:5px;min-width:135px}
+.field.grow{flex:1;min-width:220px}
+label{font-size:12px;color:var(--muted);font-weight:650}
+input,select,textarea{border:1px solid var(--line);border-radius:9px;padding:9px 10px;background:#fff;color:var(--text);outline:none}
+input:focus,select:focus,textarea:focus{border-color:#8bb1ff;box-shadow:0 0 0 3px #e8f0ff}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(145px,1fr));gap:12px;margin:14px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px;box-shadow:var(--shadow)}
+.kpi .n{font-size:25px;font-weight:800;line-height:1.1;margin-top:7px}
+.kpi .t{font-size:12px;color:var(--muted)}
+.kpi .s{font-size:11px;color:var(--muted);margin-top:7px}
+.kpi.good .n{color:var(--good)} .kpi.warn .n{color:var(--warn)}
+.grid{display:grid;grid-template-columns:1.55fr .75fr;gap:14px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.card-head{padding:13px 15px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center}
+.card-head h2{margin:0;font-size:15px}
+.card-body{padding:14px}
+.mini-note{font-size:12px;color:var(--muted)}
+.summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.summary-item{border:1px solid var(--line);border-radius:12px;padding:12px}
+.summary-item b{font-size:18px}
+.bar{height:7px;background:#edf1f6;border-radius:99px;overflow:hidden;margin-top:9px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.table-wrap{overflow:auto;max-height:535px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;white-space:nowrap;vertical-align:top}
+th{position:sticky;top:0;background:#f9fbfd;z-index:2;color:#4d5b6d;font-size:11px}
+tr:hover td{background:#fbfdff}
+.badge{display:inline-flex;border-radius:999px;padding:4px 7px;font-size:11px;font-weight:700}
+.badge.ok{background:#e8f8f1;color:#087a54}
+.badge.wait{background:#fff4e5;color:#a15c00}
+.badge.no{background:#feeceb;color:#b42318}
+.badge.info{background:#edf4ff;color:#2458b8}
+.rate{font-weight:800}
+.small-btn{border:0;background:transparent;color:var(--accent);padding:3px 5px;font-weight:700}
+.small-btn.del{color:var(--bad)}
+.pending{display:flex;flex-direction:column;gap:7px}
+.pending-row{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;align-items:center}
+.pending-row .name{font-weight:700;font-size:12px}
+.pending-row .meta{font-size:11px;color:var(--muted)}
+.control-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.control-add{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.control-add select{min-width:0;width:100%}
+.control-summary{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px;font-size:11px;color:var(--muted)}
+.section-gap{margin-top:14px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding:0 14px}
+.tab{border:0;background:transparent;padding:11px 10px;color:var(--muted);font-weight:700;border-bottom:2px solid transparent}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.hidden{display:none!important}
+.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.form-grid .span2{grid-column:span 2}.form-grid .span4{grid-column:span 4}
+textarea{resize:vertical;min-height:76px}
+.statusline{margin-top:10px;font-size:12px;color:var(--muted)}
+.statusline.ok{color:var(--good)} .statusline.bad{color:var(--bad)}
+.modal-backdrop{position:fixed;inset:0;background:rgba(14,24,38,.48);display:flex;align-items:center;justify-content:center;padding:18px;z-index:20}
+.modal{width:min(920px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.28)}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:15px 18px;border-bottom:1px solid var(--line)}
+.modal-body{padding:16px 18px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:0 18px 18px}
+.report-preview{white-space:pre-wrap;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:12px;font-family:Consolas,monospace;font-size:12px;line-height:1.45}
+.directory-form{display:grid;grid-template-columns:1.4fr .8fr 1fr 1fr 1fr auto;gap:8px;align-items:end}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.footer-note{margin-top:12px;color:var(--muted);font-size:11px}
+.cloud-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:7px 10px;font-size:11px;font-weight:750;background:#fff;color:var(--muted)}
+.cloud-pill.ok{color:var(--good);border-color:#b7e4d3;background:#f1fbf7}
+.cloud-pill.warn{color:var(--warn);border-color:#f4d4a5;background:#fff9ef}
+.cloud-pill.bad{color:var(--bad);border-color:#f2b8b5;background:#fff5f4}
+.cloud-dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.cloud-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cloud-help{margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#f8fafc;font-size:12px;color:var(--muted);line-height:1.55}
+.login-gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}
+.login-card{width:min(430px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 70px rgba(20,34,55,.16);padding:24px}
+.login-card h2{margin:0 0 6px;font-size:23px}
+.login-card p{margin:0 0 20px;color:var(--muted);font-size:13px;line-height:1.5}
+.login-card .field{margin-bottom:12px}
+.login-card .btn{width:100%;margin-top:4px}
+.login-note{margin-top:13px;font-size:11px;color:var(--muted);line-height:1.45}
+.app.auth-hidden{visibility:hidden}
+.user-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:#f8fafc;border:1px solid var(--line);font-size:11px;color:var(--muted);max-width:220px}
+.user-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:720px){.cloud-grid{grid-template-columns:1fr}}
+@media(max-width:1200px){.kpis{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.form-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:720px){.app{padding:10px}.topbar{align-items:flex-start;flex-direction:column}.actions{justify-content:flex-start}.kpis{grid-template-columns:repeat(2,1fr)}.summary-grid{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}.form-grid .span2,.form-grid .span4{grid-column:span 1}.directory-form{grid-template-columns:1fr}.toolbar{align-items:stretch}.field{min-width:100%}}
+</style>
+</head>
+<body>
+<div class="login-gate" id="loginGate">
+  <div class="login-card">
+    <h2>ЖД отдел</h2>
+    <p>Мониторинг наличия и стоимости фитинговых платформ. Войдите под учётной записью сотрудника.</p>
+    <div class="field"><label>E-mail</label><input id="loginEmail" type="email" autocomplete="username" placeholder="user@company.ru"></div>
+    <div class="field"><label>Пароль</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Пароль"></div>
+    <button class="btn primary" id="loginBtn" type="button">Войти</button>
+    <div class="statusline" id="loginStatus"></div>
+    <div class="login-note">Настройки Supabase уже встроены в дашборд. Пароль сотрудника в HTML не хранится.</div>
+  </div>
+</div>
+<div class="app auth-hidden" id="mainApp">
+  <div class="topbar">
+    <div class="brand">
+      <h1>ЖД отдел · рынок фитинговых платформ</h1>
+      <p>Ежедневный сбор наличия, ставок и условий от собственников, операторов и арендаторов</p>
+    </div>
+    <div class="actions">
+      <span class="cloud-pill warn" id="cloudStatus"><span class="cloud-dot"></span><span id="cloudStatusText">Подключение…</span></span>
+      <span class="user-chip" id="userChip"><span id="userEmail">—</span></span>
+      <button class="btn" id="refreshCloudBtn" type="button">↻ Обновить</button>
+      <button class="btn" id="logoutBtn" type="button">Выйти</button>
+      <button class="btn" id="startSurveyBtn">Начать опрос дня</button>
+      <button class="btn" id="openEntryBtn">+ Предложение</button>
+      <button class="btn primary" id="excelBtn">Сформировать Excel</button>
+      <button class="btn good" id="mailBtn">Письмо-отчёт</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="field"><label>Дата отчёта</label><input type="date" id="reportDate"></div>
+    <div class="field"><label>Тип контрагента</label><select id="filterRole"><option value="">Все</option><option>Собственник</option><option>Оператор</option><option>Арендатор</option></select></div>
+    <div class="field"><label>Платформа</label><select id="filterLength"><option value="">Все</option><option value="80">80 фут</option><option value="60">60 фут</option><option value="40">40 фут</option></select></div>
+    <div class="field"><label>Статус</label><select id="filterStatus"><option value="">Все</option><option>Ответ получен</option><option>Ожидаем ответ</option><option>Нет предложения</option></select></div>
+    <div class="field grow"><label>Поиск</label><input id="search" placeholder="Компания, станция, модель, комментарий"></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="t">Контрагентов в опросе</div><div class="n" id="kpiSurvey">0</div><div class="s" id="kpiSurveySub">из 0 активных</div></div>
+    <div class="kpi good"><div class="t">Ответили</div><div class="n" id="kpiReplies">0%</div><div class="s" id="kpiRepliesSub">0 компаний</div></div>
+    <div class="kpi"><div class="t">ПС в наличии</div><div class="n" id="kpiQty">0</div><div class="s">вагонов по ответам</div></div>
+    <div class="kpi"><div class="t">80 фут · минимум</div><div class="n" id="kpiMin80">—</div><div class="s">₽/вагон/сутки</div></div>
+    <div class="kpi"><div class="t">80 фут · средняя</div><div class="n" id="kpiAvg80">—</div><div class="s">₽/вагон/сутки</div></div>
+    <div class="kpi warn"><div class="t">Ждём ответ</div><div class="n" id="kpiPending">0</div><div class="s">нужно дожать сегодня</div></div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="tabs">
+          <button class="tab active" data-tab="market">Сбор рынка</button>
+          <button class="tab" data-tab="directory">Контрагенты</button>
+        </div>
+
+        <div id="marketTab">
+          <div class="card-head">
+            <h2>Предложения и ответы за день</h2>
+            <span class="mini-note" id="rowCount">0 строк</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Компания</th><th>Роль</th><th>Статус</th><th>ПЛ</th><th>Модель</th><th>Наличие</th><th>Локация</th><th>Ставка</th><th>НДС</th><th>Ремонты</th><th>Доступно</th><th>Комментарий</th><th></th>
+              </tr></thead>
+              <tbody id="marketBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="directoryTab" class="hidden">
+          <div class="card-body">
+            <div class="directory-form">
+              <div class="field"><label>Компания</label><input id="dirName" placeholder="Наименование"></div>
+              <div class="field"><label>Роль</label><select id="dirRole"><option>Собственник</option><option>Оператор</option><option>Арендатор</option></select></div>
+              <div class="field"><label>Контакт</label><input id="dirContact" placeholder="ФИО"></div>
+              <div class="field"><label>E-mail</label><input id="dirEmail" placeholder="mail@company.ru"></div>
+              <div class="field"><label>Телефон</label><input id="dirPhone" placeholder="+7..."></div>
+              <button class="btn primary" id="addDirBtn">Добавить</button>
+            </div>
+          </div>
+          <div class="table-wrap" style="max-height:460px">
+            <table>
+              <thead><tr><th>Компания</th><th>Роль</th><th>Контакт</th><th>E-mail</th><th>Телефон</th><th>Активен</th><th></th></tr></thead>
+              <tbody id="dirBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card section-gap">
+        <div class="card-head"><h2>Сводка рынка по типу платформ</h2><span class="mini-note">Сравниваются ставки ₽/вагон/сутки</span></div>
+        <div class="card-body"><div class="summary-grid" id="summaryGrid"></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-head"><h2>Контроль опроса</h2><span class="mini-note">Список сохраняется по каждой дате</span></div>
+        <div class="card-body">
+          <div class="control-summary">
+            <span id="controlSummaryText">0 компаний в контроле</span>
+            <button class="small-btn" id="resetControlBtn" type="button">Вернуть активных</button>
+          </div>
+          <div class="pending" id="pendingList"></div>
+          <div class="control-add" style="grid-template-columns:1fr auto">
+            <input id="controlNewCompany" list="controlCompanyList" placeholder="Введите наименование компании">
+            <datalist id="controlCompanyList"></datalist>
+            <button class="btn primary" id="addControlBtn" type="button">+ Добавить в опрос</button>
+          </div>
+          <div class="mini-note" style="margin-top:7px">Можно выбрать существующую компанию или ввести новое наименование вручную. Новая компания автоматически добавится в справочник.</div>
+        </div>
+      </div>
+
+      <div class="card section-gap">
+        <div class="card-head"><h2>Лучшие доступные предложения</h2><span class="mini-note">По минимальной суточной ставке</span></div>
+        <div class="card-body" id="bestOffers"></div>
+      </div>
+
+      <div class="card section-gap">
+        <div class="card-head"><h2>Логика работы сотрудника</h2></div>
+        <div class="card-body mini-note" style="line-height:1.6">
+          1. Нажать <b>«Начать опрос дня»</b> — создаются строки по всем активным контрагентам.<br>
+          2. По мере ответов редактировать строки и заносить наличие, ставку, локацию и условия.<br>
+          3. Для нескольких предложений одной компании использовать <b>«+ Предложение»</b>.<br>
+          4. В конце дня выгрузить Excel и сформировать письмо-отчёт.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">Основные данные хранятся в общей базе Supabase. Локальное хранилище браузера используется только как резервный кэш.</div>
+</div>
+
+
+<div class="modal-backdrop hidden" id="entryModal">
+  <div class="modal">
+    <div class="modal-head"><b id="entryTitle">Новое предложение</b><button class="btn" data-close="entryModal">Закрыть</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field"><label>Дата</label><input type="date" id="eDate"></div>
+        <div class="field"><label>Собственник / компания</label><input id="eCompany" list="companyList" placeholder="Выберите или введите компанию"><datalist id="companyList"></datalist></div>
+        <div class="field"><label>Статус</label><select id="eStatus"><option>Ответ получен</option><option>Ожидаем ответ</option><option>Нет предложения</option></select></div>
+        <div class="field"><label>Канал</label><select id="eChannel"><option>E-mail</option><option>Телефон</option><option>Telegram</option><option>WhatsApp</option><option>Другое</option></select></div>
+
+        <div class="field"><label>Длина платформы</label><select id="eLength"><option value="">—</option><option value="80">80 фут</option><option value="60">60 фут</option><option value="40">40 фут</option></select></div>
+        <div class="field"><label>Модель</label><input id="eModel" placeholder="например, 13-6903"></div>
+        <div class="field"><label>Количество, ваг.</label><input id="eQty" type="number" min="0" step="1" value="0"></div>
+        <div class="field"><label>Ставка, ₽/ваг/сут</label><input id="eRate" type="number" min="0" step="1" value="0"></div>
+
+        <div class="field span2"><label>Локация / станция</label><input id="eLocation" placeholder="Станция, регион"></div>
+        <div class="field"><label>Доступно с</label><input type="date" id="eAvailable"></div>
+        <div class="field"><label>НДС</label><select id="eVat"><option>с НДС</option><option>без НДС</option><option>не указано</option></select></div>
+
+        <div class="field"><label>Ремонты</label><select id="eRepairs"><option>на собственнике</option><option>на арендаторе</option><option>по договору</option><option>не указано</option></select></div>
+        <div class="field"><label>Мин. срок, мес.</label><input id="eTerm" type="number" min="0" step="1" value="0"></div>
+        <div class="field span2"><label>Комментарий / ограничения</label><input id="eComment" placeholder="Условия, география, ограничения, торг"></div>
+      </div>
+      <div class="statusline" id="entryStatus"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" data-close="entryModal">Отмена</button><button class="btn primary" id="saveEntryBtn">Сохранить</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="mailModal">
+  <div class="modal">
+    <div class="modal-head"><b>Письмо-отчёт по рынку платформ</b><button class="btn" data-close="mailModal">Закрыть</button></div>
+    <div class="modal-body">
+      <div class="form-grid" style="margin-bottom:12px">
+        <div class="field span2"><label>Кому</label><input id="mailTo" placeholder="director@company.ru; team@company.ru"></div>
+        <div class="field span2"><label>Тема</label><input id="mailSubject"></div>
+      </div>
+      <div class="report-preview" id="mailPreview"></div>
+      <div class="statusline" id="mailStatus"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="copyMailBtn">Копировать текст</button>
+      <a class="btn good" id="mailtoBtn" href="#">Открыть в почте</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const KEY_ENTRIES='railMarketEntries_v2';
+  const KEY_DIR='railMarketDirectory_v2';
+  const KEY_CONTROL='railMarketDailyControl_v1';
+  const SUPABASE_URL='https://teyviuvxaoaddnsxrppx.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY='sb_publishable_cpkrHrzPerLNZUi8adUAyg_G_K0bn-o';
+  const KEY_LAST_EMAIL='railLastEmail_v1';
+  const fmt = new Intl.NumberFormat('ru-RU');
+  const today = new Date().toISOString().slice(0,10);
+  const demoDir = [
+    {id:'c1',name:"Новая Логистическая",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c2',name:"ФГК",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c3',name:"ДВТГ",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c4',name:"ТрансКонтейнер",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c5',name:"ТрансСинергия",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c6',name:"Максима Логистик",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c7',name:"Логистика 1520",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c8',name:"ТрансЛес",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c9',name:"ЦФС",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c10',name:"Эникарго",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c11',name:"СРТ",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c12',name:"Транзит",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c13',name:"Восточный Экспресс",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c14',name:"Логопер",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c15',name:"РЖДБА",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c16',name:"Евросиб",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c17',name:"СКЛ (Атлант)",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c18',name:"АФГ",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c19',name:"Содекс",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c20',name:"ИКК",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c21',name:"РФЛ",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c22',name:"УТО",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c23',name:"Феско",role:'Собственник',contact:'',email:'',phone:'',active:true},
+    {id:'c24',name:"Фортис",role:'Собственник',contact:'',email:'',phone:'',active:true}
+  ];
+  const demoEntries = [];
+  let directory = load(KEY_DIR, demoDir);
+  let entries = load(KEY_ENTRIES, demoEntries);
+  let controlLists = load(KEY_CONTROL, {});
+  let editId = null;
+  let sbClient = null;
+  let cloudReady = false;
+  let cloudSyncTimer = null;
+  let cloudSyncBusy = false;
+
+  const seededOwners = ["Новая Логистическая", "ФГК", "ДВТГ", "ТрансКонтейнер", "ТрансСинергия", "Максима Логистик", "Логистика 1520", "ТрансЛес", "ЦФС", "Эникарго", "СРТ", "Транзит", "Восточный Экспресс", "Логопер", "РЖДБА", "Евросиб", "СКЛ (Атлант)", "АФГ", "Содекс", "ИКК", "РФЛ", "УТО", "Феско", "Фортис"];
+  seededOwners.forEach((name)=>{
+    if(!directory.some(c=>String(c.name||'').toLowerCase()===name.toLowerCase())){
+      directory.push({id:'c'+Date.now()+Math.random().toString(16).slice(2),name,role:'Собственник',contact:'',email:'',phone:'',active:true});
+    }
+  });
+  localStorage.setItem(KEY_DIR,JSON.stringify(directory));
+
+  function load(key, fallback){
+    try{ const raw=localStorage.getItem(key); return raw?JSON.parse(raw):fallback; }catch(e){ return fallback; }
+  }
+  function save(){
+    localStorage.setItem(KEY_DIR,JSON.stringify(directory));
+    localStorage.setItem(KEY_ENTRIES,JSON.stringify(entries));
+    localStorage.setItem(KEY_CONTROL,JSON.stringify(controlLists));
+    queueCloudSync();
+  }
+  function esc(s){ return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function company(id){ return directory.find(x=>x.id===id)||{name:'Неизвестно',role:'—'}; }
+  function dateRu(s){ if(!s)return '—'; const [y,m,d]=s.split('-'); return `${d}.${m}.${y}`; }
+  function currentDate(){ return document.getElementById('reportDate').value || today; }
+
+  function ensureControlList(dateValue){
+    const d=dateValue||currentDate();
+    if(!Array.isArray(controlLists[d])){
+      const fromEntries=[...new Set(entries.filter(e=>e.date===d).map(e=>e.companyId))];
+      controlLists[d]=fromEntries.length
+        ? [...new Set([...directory.filter(c=>c.active).map(c=>c.id), ...fromEntries])]
+        : directory.filter(c=>c.active).map(c=>c.id);
+      save();
+    }
+    controlLists[d]=controlLists[d].filter(id=>directory.some(c=>c.id===id));
+    return controlLists[d];
+  }
+
+  function getControlCompanies(){
+    const ids=ensureControlList(currentDate());
+    return ids.map(id=>directory.find(c=>c.id===id)).filter(Boolean);
+  }
+
+  function addToControl(companyId){
+    const d=currentDate();
+    const ids=ensureControlList(d);
+    if(companyId && !ids.includes(companyId)){
+      ids.push(companyId);
+      controlLists[d]=ids;
+      save();
+      render();
+    }
+  }
+
+  function removeFromControl(companyId){
+    const d=currentDate();
+    const ids=ensureControlList(d).filter(id=>id!==companyId);
+    controlLists[d]=ids;
+    save();
+    render();
+  }
+
+  function resetControlList(){
+    const d=currentDate();
+    controlLists[d]=directory.filter(c=>c.active).map(c=>c.id);
+    save();
+    render();
+  }
+
+  function setCloudStatus(mode,text){
+    const pill=document.getElementById('cloudStatus');
+    const label=document.getElementById('cloudStatusText');
+    if(!pill||!label)return;
+    pill.className='cloud-pill '+(mode||'warn');
+    label.textContent=text;
+  }
+
+  function loginMessage(text,isBad=false){
+    const el=document.getElementById('loginStatus');
+    if(!el)return;
+    el.textContent=text||'';
+    el.className='statusline '+(isBad?'bad':'ok');
+  }
+
+  function showLogin(show=true){
+    document.getElementById('loginGate').classList.toggle('hidden',!show);
+    document.getElementById('mainApp').classList.toggle('auth-hidden',show);
+    if(show){
+      document.getElementById('loginPassword').value='';
+      setTimeout(()=>document.getElementById('loginEmail').focus(),0);
+    }
+  }
+
+  function initSupabaseClient(){
+    if(!window.supabase){
+      sbClient=null; cloudReady=false; setCloudStatus('bad','Supabase JS не загружен'); return false;
+    }
+    sbClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+    return true;
+  }
+
+  function companyToCloud(c){
+    return {id:String(c.id),name:c.name||'',role:c.role||'Собственник',contact:c.contact||'',email:c.email||'',phone:c.phone||'',active:c.active!==false,updated_at:new Date().toISOString()};
+  }
+  function companyFromCloud(c){
+    return {id:String(c.id),name:c.name||'',role:c.role||'Собственник',contact:c.contact||'',email:c.email||'',phone:c.phone||'',active:c.active!==false};
+  }
+  function entryToCloud(e){
+    return {id:String(e.id),report_date:e.date,company_id:String(e.companyId),status:e.status||'Ожидаем ответ',channel:e.channel||'',platform_length:e.length||'',model:e.model||'',qty:Number(e.qty)||0,rate:Number(e.rate)||0,location:e.location||'',available_date:e.available||null,vat:e.vat||'',repairs:e.repairs||'',term_months:Number(e.term)||0,comment:e.comment||'',updated_at:new Date().toISOString()};
+  }
+  function entryFromCloud(e){
+    return {id:String(e.id),date:e.report_date,companyId:String(e.company_id),status:e.status||'Ожидаем ответ',channel:e.channel||'',length:e.platform_length||'',model:e.model||'',qty:Number(e.qty)||0,rate:Number(e.rate)||0,location:e.location||'',available:e.available_date||'',vat:e.vat||'',repairs:e.repairs||'',term:Number(e.term_months)||0,comment:e.comment||''};
+  }
+
+  function ensureSeededOwnersInDirectory(){
+    let changed=false;
+    seededOwners.forEach(name=>{
+      if(!directory.some(c=>String(c.name||'').trim().toLowerCase()===name.toLowerCase())){
+        directory.push({id:'c'+Date.now()+Math.random().toString(16).slice(2),name,role:'Собственник',contact:'',email:'',phone:'',active:true});
+        changed=true;
+      }
+    });
+    return changed;
+  }
+
+  async function getCloudSession(){
+    if(!sbClient)return null;
+    const {data,error}=await sbClient.auth.getSession();
+    if(error)throw error;
+    return data?.session||null;
+  }
+
+  async function applySession(session,loadData=true){
+    if(!session){
+      cloudReady=false;
+      setCloudStatus('warn','Требуется вход');
+      document.getElementById('userEmail').textContent='—';
+      showLogin(true);
+      return;
+    }
+    cloudReady=true;
+    const email=session.user?.email||'пользователь';
+    document.getElementById('userEmail').textContent=email;
+    localStorage.setItem(KEY_LAST_EMAIL,email);
+    setCloudStatus('ok','Supabase · подключено');
+    showLogin(false);
+    if(loadData)await bootstrapOrLoadCloud();
+  }
+
+  async function loginSupabase(){
+    if(!sbClient && !initSupabaseClient())throw new Error('Не удалось загрузить библиотеку Supabase.');
+    const email=document.getElementById('loginEmail').value.trim();
+    const password=document.getElementById('loginPassword').value;
+    if(!email||!password)throw new Error('Укажите e-mail и пароль сотрудника.');
+    loginMessage('Выполняется вход…');
+    setCloudStatus('warn','Вход…');
+    const {data,error}=await sbClient.auth.signInWithPassword({email,password});
+    if(error)throw error;
+    if(!data.session)throw new Error('Сессия не создана.');
+    await applySession(data.session,true);
+    loginMessage('');
+  }
+
+  async function bootstrapOrLoadCloud(){
+    if(!cloudReady||!sbClient)return;
+    setCloudStatus('warn','Загрузка данных…');
+    const [companiesRes,entriesRes,controlsRes]=await Promise.all([
+      sbClient.from('rail_companies').select('*').order('name'),
+      sbClient.from('rail_market_entries').select('*').order('report_date',{ascending:true}),
+      sbClient.from('rail_daily_control').select('*').order('report_date',{ascending:true}).order('position',{ascending:true})
+    ]);
+    const err=companiesRes.error||entriesRes.error||controlsRes.error;
+    if(err)throw err;
+    const hasRemote=(companiesRes.data?.length||0)+(entriesRes.data?.length||0)+(controlsRes.data?.length||0)>0;
+    if(!hasRemote){
+      await pushSnapshotToCloud(true);
+      setCloudStatus('ok','Supabase · база создана');
+      return;
+    }
+    directory=(companiesRes.data||[]).map(companyFromCloud);
+    entries=(entriesRes.data||[]).map(entryFromCloud);
+    controlLists={};
+    (controlsRes.data||[]).forEach(r=>{
+      if(!controlLists[r.report_date])controlLists[r.report_date]=[];
+      controlLists[r.report_date].push(String(r.company_id));
+    });
+    localStorage.setItem(KEY_DIR,JSON.stringify(directory));
+    localStorage.setItem(KEY_ENTRIES,JSON.stringify(entries));
+    localStorage.setItem(KEY_CONTROL,JSON.stringify(controlLists));
+    const seededChanged=ensureSeededOwnersInDirectory();
+    localStorage.setItem(KEY_DIR,JSON.stringify(directory));
+    render();
+    if(seededChanged)await pushSnapshotToCloud(false);
+    const session=await getCloudSession();
+    setCloudStatus('ok','Supabase · '+(session?.user?.email||'синхронизировано'));
+  }
+
+  function queueCloudSync(){
+    if(!cloudReady||!sbClient)return;
+    clearTimeout(cloudSyncTimer);
+    cloudSyncTimer=setTimeout(()=>pushSnapshotToCloud(false).catch(err=>{
+      setCloudStatus('bad','Ошибка синхронизации');
+      console.error(err);
+    }),700);
+  }
+
+  async function syncControlDate(d){
+    if(!cloudReady||!sbClient)return;
+    const ids=Array.isArray(controlLists[d])?controlLists[d]:[];
+    const del=await sbClient.from('rail_daily_control').delete().eq('report_date',d);
+    if(del.error)throw del.error;
+    if(ids.length){
+      const rows=ids.map((companyId,position)=>({report_date:d,company_id:String(companyId),position}));
+      const ins=await sbClient.from('rail_daily_control').insert(rows);
+      if(ins.error)throw ins.error;
+    }
+  }
+
+  async function pushSnapshotToCloud(allControls=false){
+    if(!cloudReady||!sbClient||cloudSyncBusy)return;
+    cloudSyncBusy=true;
+    try{
+      if(directory.length){
+        const r=await sbClient.from('rail_companies').upsert(directory.map(companyToCloud),{onConflict:'id'});
+        if(r.error)throw r.error;
+      }
+      if(entries.length){
+        const r=await sbClient.from('rail_market_entries').upsert(entries.map(entryToCloud),{onConflict:'id'});
+        if(r.error)throw r.error;
+      }
+      if(allControls){
+        for(const d of Object.keys(controlLists))await syncControlDate(d);
+      }else{
+        await syncControlDate(currentDate());
+      }
+      const session=await getCloudSession();
+      setCloudStatus('ok','Supabase · '+(session?.user?.email||'синхронизировано'));
+    }finally{cloudSyncBusy=false;}
+  }
+
+  async function deleteCloudEntry(id){
+    if(!cloudReady||!sbClient)return;
+    const r=await sbClient.from('rail_market_entries').delete().eq('id',String(id));
+    if(r.error)throw r.error;
+  }
+
+  async function deleteCloudCompany(id){
+    if(!cloudReady||!sbClient)return;
+    const c=await sbClient.from('rail_companies').delete().eq('id',String(id));
+    if(c.error)throw c.error;
+    const ctl=await sbClient.from('rail_daily_control').delete().eq('company_id',String(id));
+    if(ctl.error)throw ctl.error;
+  }
+
+  async function logoutSupabase(){
+    if(sbClient)await sbClient.auth.signOut();
+    cloudReady=false;
+    setCloudStatus('warn','Требуется вход');
+    document.getElementById('userEmail').textContent='—';
+    showLogin(true);
+  }
+
+  const reportDate=document.getElementById('reportDate');
+  reportDate.value=today;
+
+  function filteredEntries(){
+    const d=currentDate(), role=document.getElementById('filterRole').value, len=document.getElementById('filterLength').value, status=document.getElementById('filterStatus').value, q=document.getElementById('search').value.trim().toLowerCase();
+    return entries.filter(e=>{
+      const c=company(e.companyId);
+      const hay=[c.name,c.role,e.model,e.location,e.comment,e.status].join(' ').toLowerCase();
+      return e.date===d && (!role||c.role===role) && (!len||e.length===len) && (!status||e.status===status) && (!q||hay.includes(q));
+    });
+  }
+
+  function statusBadge(s){
+    if(s==='Ответ получен')return '<span class="badge ok">Ответ</span>';
+    if(s==='Ожидаем ответ')return '<span class="badge wait">Ожидаем</span>';
+    return '<span class="badge no">Нет ПС</span>';
+  }
+
+  function render(){
+    renderMarket(); renderDirectory(); renderKPIs(); renderSummary(); renderPending(); renderBest(); refreshCompanySelect(); renderControlAddSelect();
+  }
+
+  function renderMarket(){
+    const rows=filteredEntries();
+    document.getElementById('rowCount').textContent=`${rows.length} строк`;
+    const body=document.getElementById('marketBody');
+    if(!rows.length){body.innerHTML='<tr><td colspan="13"><div class="empty">Нет записей по выбранным фильтрам</div></td></tr>';return;}
+    body.innerHTML=rows.map(e=>{
+      const c=company(e.companyId);
+      return `<tr>
+        <td><b>${esc(c.name)}</b></td><td>${esc(c.role)}</td><td>${statusBadge(e.status)}</td>
+        <td>${e.length?esc(e.length)+'′':'—'}</td><td>${esc(e.model||'—')}</td><td>${e.qty?fmt.format(e.qty):'—'}</td>
+        <td>${esc(e.location||'—')}</td><td class="rate">${e.rate?fmt.format(e.rate)+' ₽':'—'}</td><td>${esc(e.vat||'—')}</td>
+        <td>${esc(e.repairs||'—')}</td><td>${dateRu(e.available)}</td><td title="${esc(e.comment||'')}">${esc((e.comment||'—').slice(0,34))}</td>
+        <td><button class="small-btn" data-edit="${e.id}">Изм.</button><button class="small-btn del" data-del="${e.id}">×</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderDirectory(){
+    const body=document.getElementById('dirBody');
+    body.innerHTML=directory.map(c=>`<tr>
+      <td><input data-dirfield="name" data-id="${c.id}" value="${esc(c.name)}" style="min-width:180px"></td>
+      <td><select data-dirfield="role" data-id="${c.id}"><option ${c.role==='Собственник'?'selected':''}>Собственник</option><option ${c.role==='Оператор'?'selected':''}>Оператор</option><option ${c.role==='Арендатор'?'selected':''}>Арендатор</option></select></td>
+      <td><input data-dirfield="contact" data-id="${c.id}" value="${esc(c.contact||'')}" placeholder="ФИО"></td>
+      <td><input data-dirfield="email" data-id="${c.id}" value="${esc(c.email||'')}" placeholder="E-mail"></td>
+      <td><input data-dirfield="phone" data-id="${c.id}" value="${esc(c.phone||'')}" placeholder="Телефон"></td>
+      <td><input type="checkbox" data-active="${c.id}" ${c.active?'checked':''}></td>
+      <td><button class="small-btn del" data-dirdel="${c.id}">Удалить</button></td>
+    </tr>`).join('');
+  }
+
+  function dayEntries(){ return entries.filter(e=>e.date===currentDate()); }
+  function dailyCompanyStatus(){
+    const map=new Map();
+    dayEntries().forEach(e=>{
+      const prev=map.get(e.companyId);
+      const priority={'Ответ получен':3,'Нет предложения':2,'Ожидаем ответ':1};
+      if(!prev||priority[e.status]>priority[prev]) map.set(e.companyId,e.status);
+    });
+    return map;
+  }
+
+  function renderKPIs(){
+    const active=getControlCompanies();
+    const statuses=dailyCompanyStatus();
+    const surveyed=active.filter(c=>statuses.has(c.id)).length;
+    const replies=active.filter(c=>statuses.get(c.id)==='Ответ получен'||statuses.get(c.id)==='Нет предложения').length;
+    const pending=active.filter(c=>!statuses.has(c.id)||statuses.get(c.id)==='Ожидаем ответ').length;
+    const offers=dayEntries().filter(e=>e.status==='Ответ получен');
+    const qty=offers.reduce((s,e)=>s+(Number(e.qty)||0),0);
+    const r80=offers.filter(e=>e.length==='80'&&Number(e.rate)>0).map(e=>Number(e.rate));
+    const min80=r80.length?Math.min(...r80):null;
+    const avg80=r80.length?Math.round(r80.reduce((a,b)=>a+b,0)/r80.length):null;
+    document.getElementById('kpiSurvey').textContent=surveyed;
+    document.getElementById('kpiSurveySub').textContent=`из ${active.length} активных`;
+    document.getElementById('kpiReplies').textContent=active.length?Math.round(replies/active.length*100)+'%':'0%';
+    document.getElementById('kpiRepliesSub').textContent=`${replies} компаний`;
+    document.getElementById('kpiQty').textContent=fmt.format(qty);
+    document.getElementById('kpiMin80').textContent=min80?fmt.format(min80):'—';
+    document.getElementById('kpiAvg80').textContent=avg80?fmt.format(avg80):'—';
+    document.getElementById('kpiPending').textContent=pending;
+  }
+
+  function statsFor(len){
+    const a=dayEntries().filter(e=>e.status==='Ответ получен'&&e.length===len);
+    const qty=a.reduce((s,e)=>s+(Number(e.qty)||0),0);
+    const rates=a.map(e=>Number(e.rate)).filter(x=>x>0);
+    return {qty,min:rates.length?Math.min(...rates):0,avg:rates.length?Math.round(rates.reduce((x,y)=>x+y,0)/rates.length):0,count:a.length};
+  }
+  function renderSummary(){
+    const maxQty=Math.max(1,...['80','60','40'].map(x=>statsFor(x).qty));
+    document.getElementById('summaryGrid').innerHTML=['80','60','40'].map(len=>{
+      const s=statsFor(len);
+      return `<div class="summary-item"><div class="mini-note">${len} фут</div><b>${fmt.format(s.qty)} ваг.</b>
+        <div class="mini-note" style="margin-top:6px">мин. ${s.min?fmt.format(s.min)+' ₽':'—'} · сред. ${s.avg?fmt.format(s.avg)+' ₽':'—'} · предложений ${s.count}</div>
+        <div class="bar"><i style="width:${Math.round(s.qty/maxQty*100)}%"></i></div></div>`;
+    }).join('');
+  }
+
+  function renderPending(){
+    const statuses=dailyCompanyStatus();
+    const controlled=getControlCompanies();
+    const box=document.getElementById('pendingList');
+    document.getElementById('controlSummaryText').textContent=`${controlled.length} компаний в контроле`;
+    if(!controlled.length){
+      box.innerHTML='<div class="mini-note">Список контроля пуст. Добавьте компанию ниже.</div>';
+      return;
+    }
+    box.innerHTML=controlled.map(c=>{
+      const s=statuses.get(c.id);
+      const statusHtml = s==='Ответ получен'
+        ? '<span class="badge ok">ответ</span>'
+        : s==='Нет предложения'
+          ? '<span class="badge no">нет ПС</span>'
+          : '<span class="badge wait">дожать</span>';
+      return `<div class="pending-row">
+        <div><div class="name">${esc(c.name)}</div><div class="meta">${esc(c.role)}${c.contact?' · '+esc(c.contact):''}</div></div>
+        <div class="control-actions">${statusHtml}<button class="small-btn del" type="button" data-control-remove="${c.id}">Убрать</button></div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderControlAddSelect(){
+    const list=document.getElementById('controlCompanyList');
+    if(!list)return;
+    const current=new Set(ensureControlList(currentDate()));
+    const candidates=directory.filter(c=>!current.has(c.id)).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+    list.innerHTML=candidates.map(c=>`<option value="${esc(c.name)}">${esc(c.role)}</option>`).join('');
+  }
+
+  function renderBest(){
+    const offers=dayEntries().filter(e=>e.status==='Ответ получен'&&Number(e.rate)>0).sort((a,b)=>a.rate-b.rate).slice(0,6);
+    const box=document.getElementById('bestOffers');
+    if(!offers.length){box.innerHTML='<div class="mini-note">Пока нет сопоставимых ставок.</div>';return;}
+    box.innerHTML=offers.map(e=>{const c=company(e.companyId);return `<div class="pending-row"><div><div class="name">${esc(c.name)} · ${e.length||'—'}′</div><div class="meta">${esc(e.location||'локация не указана')} · ${e.qty||0} ваг.</div></div><div class="rate">${fmt.format(e.rate)} ₽</div></div>`}).join('');
+  }
+
+  function refreshCompanySelect(){
+    const list=document.getElementById('companyList');
+    if(!list)return;
+    list.innerHTML=directory.filter(c=>c.active).sort((a,b)=>a.name.localeCompare(b.name,'ru')).map(c=>`<option value="${esc(c.name)}">${esc(c.role)}</option>`).join('');
+  }
+
+  function ensureCompanyByName(name){
+    const clean=String(name||'').trim();
+    if(!clean)return null;
+    let c=directory.find(x=>x.name.toLowerCase()===clean.toLowerCase());
+    if(c)return c;
+    c={id:'c'+Date.now()+Math.random().toString(16).slice(2),name:clean,role:'Собственник',contact:'',email:'',phone:'',active:true};
+    directory.push(c);
+    save();
+    refreshCompanySelect();
+    return c;
+  }
+
+  function openEntry(id){
+    editId=id||null;
+    const e=id?entries.find(x=>x.id===id):null;
+    document.getElementById('entryTitle').textContent=id?'Изменить запись':'Новое предложение';
+    document.getElementById('eDate').value=e?.date||currentDate();
+    refreshCompanySelect();
+    document.getElementById('eCompany').value=e?company(e.companyId).name:(directory.find(c=>c.active)?.name||'');
+    document.getElementById('eStatus').value=e?.status||'Ответ получен';
+    document.getElementById('eChannel').value=e?.channel||'E-mail';
+    document.getElementById('eLength').value=e?.length||'';
+    document.getElementById('eModel').value=e?.model||'';
+    document.getElementById('eQty').value=e?.qty||0;
+    document.getElementById('eRate').value=e?.rate||0;
+    document.getElementById('eLocation').value=e?.location||'';
+    document.getElementById('eAvailable').value=e?.available||'';
+    document.getElementById('eVat').value=e?.vat||'не указано';
+    document.getElementById('eRepairs').value=e?.repairs||'не указано';
+    document.getElementById('eTerm').value=e?.term||0;
+    document.getElementById('eComment').value=e?.comment||'';
+    document.getElementById('entryStatus').textContent='';
+    document.getElementById('entryModal').classList.remove('hidden');
+  }
+
+  function saveEntry(){
+    const companyName=document.getElementById('eCompany').value.trim();
+    const c=ensureCompanyByName(companyName);
+    if(!c){document.getElementById('entryStatus').textContent='Укажите собственника / компанию.';document.getElementById('entryStatus').className='statusline bad';return;}
+    const companyId=c.id;
+    const obj={
+      id:editId||('e'+Date.now()),date:document.getElementById('eDate').value||currentDate(),companyId,
+      status:document.getElementById('eStatus').value,channel:document.getElementById('eChannel').value,
+      length:document.getElementById('eLength').value,model:document.getElementById('eModel').value.trim(),
+      qty:Math.max(0,Number(document.getElementById('eQty').value)||0),rate:Math.max(0,Number(document.getElementById('eRate').value)||0),
+      location:document.getElementById('eLocation').value.trim(),available:document.getElementById('eAvailable').value,
+      vat:document.getElementById('eVat').value,repairs:document.getElementById('eRepairs').value,
+      term:Math.max(0,Number(document.getElementById('eTerm').value)||0),comment:document.getElementById('eComment').value.trim()
+    };
+    if(editId) entries=entries.map(x=>x.id===editId?obj:x); else entries.push(obj);
+    save(); document.getElementById('entryModal').classList.add('hidden'); render();
+  }
+
+  function startSurvey(){
+    const d=currentDate();
+    const existing=new Set(entries.filter(e=>e.date===d).map(e=>e.companyId));
+    let added=0;
+    getControlCompanies().filter(c=>!existing.has(c.id)).forEach(c=>{
+      entries.push({id:'e'+Date.now()+Math.random(),date:d,companyId:c.id,status:'Ожидаем ответ',channel:'E-mail',length:'',model:'',qty:0,rate:0,location:'',available:'',vat:'не указано',repairs:'не указано',term:0,comment:'запрос направлен'});
+      added++;
+    });
+    save(); render();
+    alert(added?`Создано ${added} строк опроса на ${dateRu(d)}.`:'По всем активным контрагентам строки на эту дату уже есть.');
+  }
+
+  function buildReportRows(){
+    return dayEntries().slice().sort((a,b)=>{
+      const la=Number(a.length)||0, lb=Number(b.length)||0;
+      if(lb!==la)return lb-la;
+      return (Number(a.rate)||999999)-(Number(b.rate)||999999);
+    });
+  }
+
+  function reportText(){
+    const d=currentDate();
+    const statuses=dailyCompanyStatus();
+    const active=getControlCompanies();
+    const replied=active.filter(c=>statuses.get(c.id)==='Ответ получен'||statuses.get(c.id)==='Нет предложения').length;
+    const offers=buildReportRows().filter(e=>e.status==='Ответ получен');
+    const totalQty=offers.reduce((s,e)=>s+(Number(e.qty)||0),0);
+    const lines=[];
+    lines.push(`Коллеги, добрый день!`);
+    lines.push('');
+    lines.push(`Отчёт по ежедневному мониторингу рынка фитинговых платформ за ${dateRu(d)}.`);
+    lines.push(`Охват: ${replied} из ${active.length} активных контрагентов. В наличии по полученным предложениям: ${totalQty} ваг.`);
+    lines.push('');
+    ['80','60','40'].forEach(len=>{
+      const arr=offers.filter(e=>e.length===len);
+      if(!arr.length)return;
+      const rates=arr.map(e=>Number(e.rate)).filter(x=>x>0);
+      lines.push(`${len}-футовые платформы:`);
+      lines.push(`  Наличие: ${arr.reduce((s,e)=>s+(Number(e.qty)||0),0)} ваг. | мин. ставка: ${rates.length?fmt.format(Math.min(...rates))+' ₽/сут':'—'} | средняя: ${rates.length?fmt.format(Math.round(rates.reduce((a,b)=>a+b,0)/rates.length))+' ₽/сут':'—'}`);
+      arr.sort((a,b)=>(a.rate||999999)-(b.rate||999999)).forEach(e=>{
+        const c=company(e.companyId);
+        lines.push(`  • ${c.name}: ${e.qty||0} ваг., ${e.rate?fmt.format(e.rate)+' ₽/ваг/сут':'ставка не указана'}, ${e.location||'локация не указана'}, ${e.available?'с '+dateRu(e.available):'дата не указана'}, ремонты: ${e.repairs||'—'}${e.comment?' — '+e.comment:''}`);
+      });
+      lines.push('');
+    });
+    const pending=active.filter(c=>!statuses.has(c.id)||statuses.get(c.id)==='Ожидаем ответ');
+    if(pending.length) lines.push(`Ожидаем ответы: ${pending.map(c=>c.name).join(', ')}.`);
+    lines.push('');
+    lines.push('Подробная таблица — в Excel-отчёте.');
+    return lines.join('\n');
+  }
+
+  function openMail(){
+    const subject=`ЖД отдел — рынок фитинговых платформ — ${dateRu(currentDate())}`;
+    const body=reportText();
+    document.getElementById('mailSubject').value=subject;
+    document.getElementById('mailPreview').textContent=body;
+    updateMailto();
+    document.getElementById('mailModal').classList.remove('hidden');
+  }
+  function updateMailto(){
+    const to=document.getElementById('mailTo').value.trim().replace(/;/g,',');
+    const sub=document.getElementById('mailSubject').value;
+    const body=document.getElementById('mailPreview').textContent;
+    document.getElementById('mailtoBtn').href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`;
+  }
+  async function copyMail(){
+    const text=document.getElementById('mailPreview').textContent;
+    try{await navigator.clipboard.writeText(text);document.getElementById('mailStatus').textContent='Текст скопирован.';document.getElementById('mailStatus').className='statusline ok';}
+    catch(e){const t=document.createElement('textarea');t.value=text;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();document.getElementById('mailStatus').textContent='Текст скопирован.';document.getElementById('mailStatus').className='statusline ok';}
+  }
+
+  function exportExcel(){
+    const d=currentDate();
+    const rows=buildReportRows();
+    const offers=rows.filter(e=>e.status==='Ответ получен');
+    const statuses=dailyCompanyStatus(), active=getControlCompanies();
+    const replied=active.filter(c=>statuses.get(c.id)==='Ответ получен'||statuses.get(c.id)==='Нет предложения').length;
+    const totalQty=offers.reduce((s,e)=>s+(Number(e.qty)||0),0);
+    const sheetData=[
+      ['ЕЖЕДНЕВНЫЙ МОНИТОРИНГ РЫНКА ФИТИНГОВЫХ ПЛАТФОРМ'],
+      ['Дата',dateRu(d)],
+      ['Охват',`${replied} из ${active.length}`],
+      ['Всего ПС в наличии',totalQty],
+      [],
+      ['Компания','Роль','Статус','Платформа, фут','Модель','Количество, ваг.','Локация','Ставка, ₽/ваг/сут','НДС','Ремонты','Доступно с','Мин. срок, мес.','Канал','Комментарий']
+    ];
+    rows.forEach(e=>{const c=company(e.companyId);sheetData.push([c.name,c.role,e.status,e.length||'',e.model||'',e.qty||0,e.location||'',e.rate||'',e.vat||'',e.repairs||'',e.available?dateRu(e.available):'',e.term||'',e.channel||'',e.comment||'']);});
+    const summary=[
+      ['Тип платформы','Наличие, ваг.','Мин. ставка, ₽/сут','Средняя ставка, ₽/сут','Количество предложений'],
+      ...['80','60','40'].map(len=>{const s=statsFor(len);return [len+' фут',s.qty,s.min||'',s.avg||'',s.count]})
+    ];
+    if(window.XLSX){
+      const wb=XLSX.utils.book_new();
+      const ws=XLSX.utils.aoa_to_sheet(sheetData);
+      ws['!cols']=[{wch:26},{wch:14},{wch:18},{wch:14},{wch:16},{wch:14},{wch:22},{wch:18},{wch:12},{wch:18},{wch:14},{wch:14},{wch:12},{wch:38}];
+      const ws2=XLSX.utils.aoa_to_sheet(summary);
+      XLSX.utils.book_append_sheet(wb,ws,'Предложения');
+      XLSX.utils.book_append_sheet(wb,ws2,'Сводка');
+      XLSX.writeFile(wb,`ЖД_рынок_платформ_${d}.xlsx`);
+    }else{
+      const csv=sheetData.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\n');
+      const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ЖД_рынок_платформ_${d}.csv`;a.click();URL.revokeObjectURL(a.href);
+      alert('Модуль XLSX не загрузился. Сформирован CSV, который открывается в Excel.');
+    }
+  }
+
+  document.getElementById('loginBtn').addEventListener('click',async()=>{
+    try{await loginSupabase();}
+    catch(err){cloudReady=false;setCloudStatus('bad','Ошибка входа');loginMessage(err.message||String(err),true);}
+  });
+  document.getElementById('loginPassword').addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();document.getElementById('loginBtn').click();}
+  });
+  document.getElementById('loginEmail').addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();document.getElementById('loginPassword').focus();}
+  });
+  document.getElementById('refreshCloudBtn').addEventListener('click',async()=>{
+    try{
+      const session=await getCloudSession();
+      if(!session){showLogin(true);return;}
+      await bootstrapOrLoadCloud();
+    }catch(err){setCloudStatus('bad','Ошибка загрузки');alert(err.message||String(err));}
+  });
+  document.getElementById('logoutBtn').addEventListener('click',()=>logoutSupabase().catch(err=>alert(err.message||String(err))));
+
+  document.getElementById('openEntryBtn').addEventListener('click',()=>openEntry());
+  document.getElementById('saveEntryBtn').addEventListener('click',saveEntry);
+  document.getElementById('startSurveyBtn').addEventListener('click',startSurvey);
+  document.getElementById('excelBtn').addEventListener('click',exportExcel);
+  document.getElementById('mailBtn').addEventListener('click',openMail);
+  document.getElementById('copyMailBtn').addEventListener('click',copyMail);
+  document.getElementById('mailTo').addEventListener('input',updateMailto);
+  document.getElementById('mailSubject').addEventListener('input',updateMailto);
+
+  document.getElementById('addControlBtn').addEventListener('click',()=>{
+    const input=document.getElementById('controlNewCompany');
+    const name=(input?.value||'').trim();
+    if(!name){alert('Укажите наименование компании.');return;}
+
+    let c=directory.find(x=>String(x.name||'').trim().toLowerCase()===name.toLowerCase());
+    if(!c){
+      c={
+        id:'c'+Date.now()+Math.random().toString(16).slice(2),
+        name:name,
+        role:'Собственник',
+        contact:'',
+        email:'',
+        phone:'',
+        active:true
+      };
+      directory.push(c);
+    }else if(!c.active){
+      c.active=true;
+    }
+
+    if(typeof addToControl==='function'){
+      addToControl(c.id);
+    }else{
+      save();
+      render();
+    }
+    input.value='';
+    save();
+    render();
+  });
+  document.getElementById('controlNewCompany').addEventListener('keydown',e=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      document.getElementById('addControlBtn').click();
+    }
+  });
+  document.getElementById('resetControlBtn').addEventListener('click',()=>{
+    if(confirm('Вернуть в контроль всех контрагентов, отмеченных активными в справочнике?')) resetControlList();
+  });
+  document.getElementById('pendingList').addEventListener('click',e=>{
+    const id=e.target.dataset.controlRemove;
+    if(id){
+      const c=directory.find(x=>x.id===id);
+      if(confirm(`Убрать ${c?c.name:'компанию'} из контроля на ${dateRu(currentDate())}?`)) removeFromControl(id);
+    }
+  });
+
+  ['filterRole','filterLength','filterStatus','search','reportDate'].forEach(id=>document.getElementById(id).addEventListener(id==='search'?'input':'change',render));
+  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.close).classList.add('hidden')));
+
+  document.getElementById('marketBody').addEventListener('click',e=>{
+    const edit=e.target.dataset.edit, del=e.target.dataset.del;
+    if(edit)openEntry(edit);
+    if(del&&confirm('Удалить запись?')){entries=entries.filter(x=>x.id!==del);save();deleteCloudEntry(del).catch(console.error);render();}
+  });
+  document.getElementById('dirBody').addEventListener('click',e=>{
+    const id=e.target.dataset.dirdel;
+    if(id&&confirm('Удалить контрагента из справочника? Исторические записи по предложениям останутся.')){directory=directory.filter(x=>x.id!==id);Object.keys(controlLists).forEach(d=>{controlLists[d]=(controlLists[d]||[]).filter(x=>x!==id);});save();deleteCloudCompany(id).catch(console.error);render();}
+  });
+  document.getElementById('dirBody').addEventListener('change',e=>{
+    const field=e.target.dataset.dirfield, rowId=e.target.dataset.id;
+    if(field&&rowId){
+      const c=directory.find(x=>x.id===rowId);
+      if(c){c[field]=e.target.value.trim();save();render();}
+      return;
+    }
+    const id=e.target.dataset.active;if(id){const c=directory.find(x=>x.id===id);if(c)c.active=e.target.checked;save();render();}
+  });
+  document.getElementById('dirBody').addEventListener('blur',e=>{
+    const field=e.target.dataset.dirfield, rowId=e.target.dataset.id;
+    if(field&&rowId){
+      const c=directory.find(x=>x.id===rowId);
+      if(c&&c[field]!==e.target.value.trim()){c[field]=e.target.value.trim();save();render();}
+    }
+  },true);
+  document.getElementById('addDirBtn').addEventListener('click',()=>{
+    const name=document.getElementById('dirName').value.trim(); if(!name){alert('Укажите компанию.');return;}
+    directory.push({id:'c'+Date.now(),name,role:document.getElementById('dirRole').value,contact:document.getElementById('dirContact').value.trim(),email:document.getElementById('dirEmail').value.trim(),phone:document.getElementById('dirPhone').value.trim(),active:true});
+    ['dirName','dirContact','dirEmail','dirPhone'].forEach(id=>document.getElementById(id).value='');save();render();
+  });
+
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');
+    document.getElementById('marketTab').classList.toggle('hidden',t.dataset.tab!=='market');
+    document.getElementById('directoryTab').classList.toggle('hidden',t.dataset.tab!=='directory');
+  }));
+
+  render();
+  document.getElementById('loginEmail').value=localStorage.getItem(KEY_LAST_EMAIL)||'';
+  if(initSupabaseClient()){
+    sbClient.auth.onAuthStateChange((event,session)=>{
+      if(event==='SIGNED_OUT')applySession(null,false).catch(console.error);
+    });
+    getCloudSession().then(session=>applySession(session,true)).catch(err=>{
+      setCloudStatus('bad','Ошибка Supabase');
+      loginMessage(err.message||String(err),true);
+      showLogin(true);
+    });
+  }else{
+    loginMessage('Не удалось загрузить библиотеку Supabase. Проверьте интернет-соединение.',true);
+    showLogin(true);
+  }
+})();
+</script>
+</body>
+</html>
